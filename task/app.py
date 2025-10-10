@@ -69,8 +69,7 @@ class GeneralPurposeAgentApplication(ChatCompletion):
             await GeneralPurposeAgent(
                 endpoint=DIAL_ENDPOINT,
                 system_prompt=SYSTEM_PROMPT,
-                tools=self.tools,
-                request=request
+                tools=self.tools
             ).handle_request(
                 choice=choice,
                 deployment_name=DEPLOYMENT_NAME,

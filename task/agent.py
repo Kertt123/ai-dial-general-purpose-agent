@@ -19,12 +19,10 @@ class GeneralPurposeAgent:
             self,
             endpoint: str,
             system_prompt: str,
-            request: Request,
             tools: list[BaseTool],
     ):
         self.endpoint = endpoint
         self.system_prompt = system_prompt
-        self.request = request
         self.tools = tools
         self._tools_dict: dict[str, BaseTool] = {
             tool.name: tool
@@ -44,7 +42,7 @@ class GeneralPurposeAgent:
         )
 
         chunks = await client.chat.completions.create(
-            messages=self._prepare_messages(self.request.messages),
+            messages=self._prepare_messages(request.messages),
             tools=[tool.schema for tool in self.tools],
             stream=True,
             deployment_name=deployment_name,
