@@ -3,7 +3,7 @@ from abc import ABC, abstractmethod
 from typing import Any
 
 from aidial_client import AsyncDial
-from aidial_sdk.chat_completion import Message, Role, CustomContent
+from aidial_sdk.chat_completion import Message, Role, CustomContent, MessageContentTextPart
 from pydantic import StrictStr
 
 from task.tools.base import BaseTool
@@ -24,22 +24,43 @@ class DeploymentTool(BaseTool, ABC):
     def tool_parameters(self) -> dict[str, Any]:
         return {}
 
+    @property
+    def system_prompt(self) -> str | None:
+        return None
+
     async def _execute(self, tool_call_params: ToolCallParams) -> str | Message:
-        #TODO:
-        # 1. Load arguments with `json`
-        # 2. Get `prompt` from arguments (by default we provide `prompt` for each deployment tool, use this param name as standard)
-        # 3. Delete `prompt` from `arguments` (there can be provided additional parameters and `prompt` will be added
-        #    as user message content and other parameters as `custom_fields`)
-        # 4. Create AsyncDial client (api_version is 2025-01-01-preview)
-        # 5. Call chat completions with:
-        #   - messages (here will be just user message. Optionally, in this class you can add system prompt `property`
-        #     and if any deployment tool provides system prompt then we need to set it as first message (system prompt))
-        #   - stream it
-        #   - deployment_name
-        #   - extra_body with `custom_fields` https://dialx.ai/dial_api#operation/sendChatCompletionRequest (last request param in documentation)
-        #   - **self.tool_parameters (will load all tool parameters that were set up in deployment tools as params, like
-        #     `top_p`, `temperature`, etc...)
-        # 6. Collect content and it to stage, also, collect custom_content -> attachments and if they are present add
-        #    them to stage as attachment as well
-        # 7. Return Message with tool role, content, custom_content and tool_call_id
-        raise NotImplementedError()
+        arguments = json.loads(tool_call_params.tool_call.function.arguments)
+        prompt = arguments.pop("prompt")
+
+        dial = AsyncDial(
+            base_url=self.endpoint,
+            api_key=tool_call_params.api_key
+        )
+
+        messages = []
+        if self.system_prompt:
+            messages.append(Message(role=Role.SYSTEM, content=self.system_prompt))
+        messages.append(Message(role=Role.USER, content=prompt))
+
+        content = ""
+        attachments = []
+        async for chunk in await dial.chat.completions.create(
+            deployment=self.deployment_name,
+            messages=messages,
+            stream=True,
+            extra_body={"custom_fields": arguments},
+            **self.tool_parameters
+        ):
+            if chunk.choices and chunk.choices[0].delta.content:
+                content += chunk.choices[0].delta.content
+            if chunk.choices and chunk.choices[0].delta.custom_content and chunk.choices[0].delta.custom_content.attachments:
+                attachments.extend(chunk.choices[0].delta.custom_content.attachments)
+
+        custom_content = CustomContent(attachments=attachments) if attachments else None
+
+        return Message(
+            role=Role.TOOL,
+            content=[MessageContentTextPart(type='text', text=StrictStr(content))],
+            custom_content=custom_content,
+            tool_call_id=StrictStr(tool_call_params.tool_call.id)
+        )
