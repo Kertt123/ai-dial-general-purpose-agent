@@ -9,4 +9,5 @@ class ToolCallParams:
     stage: Stage
     choice: Choice
     api_key: str
+    api_version: str
     conversation_id: str

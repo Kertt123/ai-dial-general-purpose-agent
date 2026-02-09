@@ -68,7 +68,10 @@ class PythonCodeInterpreterTool(BaseTool):
 
     @property
     def parameters(self) -> dict[str, Any]:
-        return self._code_execute_tool.parameters
+        params = self._code_execute_tool.parameters
+        if not params or "properties" not in params:
+            return {"type": "object", "properties": {}}
+        return params
 
     async def _execute(self, tool_call_params: ToolCallParams) -> str | Message:
         args = json.loads(tool_call_params.tool_call.function.arguments)
@@ -76,12 +79,12 @@ class PythonCodeInterpreterTool(BaseTool):
         session_id = args.get("session_id")
         stage = tool_call_params.stage
 
-        await stage.append_content("## Request arguments: \n")
-        await stage.append_content(f"```python\n{code}\n```\n")
+        stage.append_content("## Request arguments: \n")
+        stage.append_content(f"```python\n{code}\n```\n")
         if session_id:
-            await stage.append_content(f"**session_id**: {session_id}\n\r")
+            stage.append_content(f"**session_id**: {session_id}\n\r")
         else:
-            await stage.append_content("New session will be created\n\r")
+            stage.append_content("New session will be created\n\r")
 
         response_str = await self.mcp_client.call_tool(self.name, args)
         response_data = json.loads(response_str)
@@ -104,7 +107,7 @@ class PythonCodeInterpreterTool(BaseTool):
                 await dial.upload(upload_path.as_posix(), file_content, mime_type)
 
                 attachment = Attachment(type=mime_type, title=file_name, url=upload_path.as_posix())
-                await stage.append_content(f"Generated file: {file_name}")
+                stage.append_content(f"Generated file: {file_name}")
                 tool_call_params.choice.add_attachment(attachment)
 
         if execution_result.output:
@@ -113,6 +116,6 @@ class PythonCodeInterpreterTool(BaseTool):
                     execution_result.output[i] = out[:1000] + "..."
 
         result_json = execution_result.model_dump_json(indent=2)
-        await stage.append_content(f"```json\n{result_json}\n```\n")
+        stage.append_content(f"```json\n{result_json}\n```\n")
 
         return result_json

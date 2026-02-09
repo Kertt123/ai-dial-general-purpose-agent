@@ -59,30 +59,38 @@ class FileContentExtractionTool(BaseTool):
         page = args.get("page", 1)
         stage = tool_call_params.stage
 
-        await stage.append_content("## Request arguments: \n")
-        await stage.append_content(f"**File URL**: {file_url}\n\r")
+        stage.append_content("## Request arguments: \n")
+        stage.append_content(f"**File URL**: {file_url}\n\r")
         if page > 1:
-            await stage.append_content(f"**Page**: {page}\n\r")
-        await stage.append_content("## Response: \n")
+            stage.append_content(f"**Page**: {page}\n\r")
+        stage.append_content("## Response: \n")
 
-        extractor = DialFileContentExtractor(self.endpoint, tool_call_params.invocations[0].api_key)
-        content = await extractor.extract_text(file_url)
+        if not file_url:
+            content = "Error: file_url is missing."
+            stage.append_content(f"```text\n\r{content}\n\r```\n\r")
+            return content
+
+        extractor = DialFileContentExtractor(self.endpoint, tool_call_params.api_key)
+        content = extractor.extract_text(file_url)
 
         if not content:
             content = "Error: File content not found."
+            stage.append_content(f"```text\n\r{content}\n\r```\n\r")
+            return content
 
         if len(content) > 10000:
             page_size = 10000
             total_pages = (len(content) + page_size - 1) // page_size
             if page < 1:
                 page = 1
-            elif page > total_pages:
+
+            if page > total_pages:
                 content = f"Error: Page {page} does not exist. Total pages: {total_pages}"
+            else:
+                start_index = (page - 1) * page_size
+                end_index = start_index + page_size
+                page_content = content[start_index:end_index]
+                content = f"{page_content}\n\n**Page #{page}. Total pages: {total_pages}**"
 
-            start_index = (page - 1) * page_size
-            end_index = start_index + page_size
-            page_content = content[start_index:end_index]
-            content = f"{page_content}\n\n**Page #{page}. Total pages: {total_pages}**"
-
-        await stage.append_content(f"```text\n\r{content}\n\r```\n\r")
+        stage.append_content(f"```text\n\r{content}\n\r```\n\r")
         return content

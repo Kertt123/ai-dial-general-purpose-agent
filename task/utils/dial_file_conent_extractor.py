@@ -13,9 +13,10 @@ class DialFileContentExtractor:
         self.dial = Dial(base_url=endpoint, api_key=api_key)
 
     def extract_text(self, file_url: str) -> str:
-        filename, content = self.dial.files.download(file_url)
+        content = self.dial.files.download(file_url)
+        filename = content.filename
         file_extension = Path(filename).suffix.lower()
-        return self.__extract_text(content, file_extension, filename)
+        return self.__extract_text(content.get_content(), file_extension, filename)
 
     def __extract_text(self, file_content: bytes, file_extension: str, filename: str) -> str:
         """Extract text content based on file type."""

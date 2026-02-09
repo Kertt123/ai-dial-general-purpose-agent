@@ -37,8 +37,8 @@ class RagTool(BaseTool):
         self.deployment_name = deployment_name
         self.document_cache = document_cache
         self.model = SentenceTransformer(
-            model_name_or_path='all-MiniLM-L6-v2',
-            device='cpu'
+            model_name_or_path='all-MiniLM-L6-v2'
+            # device='cpu'
         )
         self.text_splitter = RecursiveCharacterTextSplitter(
             chunk_size=500,
@@ -81,26 +81,26 @@ class RagTool(BaseTool):
         }
 
     async def _execute(self, tool_call_params: ToolCallParams) -> str | Message:
-        args = json.loads(tool_call_params.arguments)
+        args = json.loads(tool_call_params.tool_call.function.arguments)
         request = args["request"]
         file_url = args["file_url"]
         stage = tool_call_params.stage
 
-        await stage.append_content("## Request arguments: \n")
-        await stage.append_content(f"**Request**: {request}\n\r")
-        await stage.append_content(f"**File URL**: {file_url}\n\r")
+        stage.append_content("## Request arguments: \n")
+        stage.append_content(f"**Request**: {request}\n\r")
+        stage.append_content(f"**File URL**: {file_url}\n\r")
 
-        cache_document_key = f"{tool_call_params.invocations[0].conversation_id}:{file_url}"
+        cache_document_key = f"{tool_call_params.conversation_id}:{file_url}"
         cached_data = self.document_cache.get(cache_document_key)
 
         if cached_data:
             index, chunks = cached_data
         else:
-            extractor = DialFileContentExtractor(self.endpoint)
-            text_content = await extractor.extract_text(file_url)
+            extractor = DialFileContentExtractor(self.endpoint, tool_call_params.api_key)
+            text_content = extractor.extract_text(file_url)
 
             if not text_content:
-                await stage.append_content("Could not extract content from the file.\n\r")
+                stage.append_content("Could not extract content from the file.\n\r")
                 return "Error: File content not found or could not be extracted."
 
             chunks = self.text_splitter.split_text(text_content)
@@ -116,13 +116,14 @@ class RagTool(BaseTool):
 
         augmented_prompt = self.__augmentation(request, retrieved_chunks)
 
-        await stage.append_content("## RAG Request: \n")
-        await stage.append_content(f"```text\n\r{augmented_prompt}\n\r```\n\r")
-        await stage.append_content("## Response: \n")
+        stage.append_content("## RAG Request: \n")
+        stage.append_content(f"```text\n\r{augmented_prompt}\n\r```\n\r")
+        stage.append_content("## Response: \n")
 
         dial = AsyncDial(
-            key="dummy",
-            url=self.endpoint,
+            base_url=self.endpoint,
+            api_key=tool_call_params.api_key,
+            api_version=tool_call_params.api_version,
         )
 
         messages = [
@@ -131,15 +132,14 @@ class RagTool(BaseTool):
         ]
 
         full_response = ""
-        async for chunk in await dial.chat_completion(
-            model=self.deployment_name,
+        async for chunk in await dial.chat.completions.create(
+            deployment_name=self.deployment_name,
             messages=messages,
             stream=True,
-            api_version='2023-12-01-preview'
         ):
-            if chunk.content:
-                await stage.append_content(chunk.content)
-                full_response += chunk.content
+            if chunk.choices and chunk.choices[0].delta.content is not None:
+                stage.append_content(chunk.choices[0].delta.content)
+                full_response += chunk.choices[0].delta.content
 
         return full_response
 

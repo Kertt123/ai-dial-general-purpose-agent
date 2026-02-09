@@ -29,7 +29,8 @@ class GeneralPurposeAgent:
         self._tool_schemas = [tool.schema for tool in self.tools] if self.tools else []
         self.state: dict[str, Any] = {TOOL_CALL_HISTORY_KEY: []}
 
-    async def handle_request(self, deployment_name: str, choice: Choice, request: Request, response: Response) -> Message:
+    async def handle_request(self, deployment_name: str, choice: Choice, request: Request,
+                             response: Response) -> Message:
         client = AsyncDial(
             base_url=self.endpoint,
             api_key=request.api_key,
@@ -126,7 +127,7 @@ class GeneralPurposeAgent:
                 raise ValueError("x-conversation-id header is required for tool calls")
 
             tasks = [
-                self._process_tool_call(tool_call, choice, request.api_key, conversation_id)
+                self._process_tool_call(tool_call, choice, request.api_key, request.api_version, conversation_id)
                 for tool_call in assistant_message.tool_calls
             ]
             tool_messages = await asyncio.gather(*tasks)
@@ -156,7 +157,9 @@ class GeneralPurposeAgent:
 
         return prepared_messages
 
-    async def _process_tool_call(self, tool_call: ToolCall, choice: Choice, api_key: str, conversation_id: str) -> dict[str, Any]:
+    async def _process_tool_call(self, tool_call: ToolCall, choice: Choice, api_key: str, api_version: str,
+                                 conversation_id: str) -> dict[
+        str, Any]:
         tool_name = tool_call.function.name
         stage = StageProcessor.open_stage(choice, name=tool_name)
         tool = self._tools_dict.get(tool_name)
@@ -181,6 +184,7 @@ class GeneralPurposeAgent:
                     stage=stage,
                     choice=choice,
                     api_key=api_key,
+                    api_version=api_version,
                     conversation_id=conversation_id,
                 )
             )
