@@ -39,22 +39,30 @@ class DeploymentTool(BaseTool, ABC):
 
         messages = []
         if self.system_prompt:
-            messages.append(Message(role=Role.SYSTEM, content=self.system_prompt))
-        messages.append(Message(role=Role.USER, content=prompt))
+            messages.append({"role": "system", "content": self.system_prompt})
+        messages.append({"role": "user", "content": prompt})
 
         content = ""
         attachments = []
-        async for chunk in await dial.chat.completions.create(
-            deployment=self.deployment_name,
-            messages=messages,
-            stream=True,
-            extra_body={"custom_fields": arguments},
-            **self.tool_parameters
-        ):
-            if chunk.choices and chunk.choices[0].delta.content:
-                content += chunk.choices[0].delta.content
-            if chunk.choices and chunk.choices[0].delta.custom_content and chunk.choices[0].delta.custom_content.attachments:
-                attachments.extend(chunk.choices[0].delta.custom_content.attachments)
+        try:
+            async for chunk in await dial.chat.completions.create(
+                    deployment_name=self.deployment_name,
+                    messages=messages,
+                    stream=True,
+                    extra_body={
+                        "custom_fields": {
+                            "configuration": {**arguments}
+                        }
+                    },
+                    **self.tool_parameters,
+            ):
+                if chunk.choices and chunk.choices[0].delta.content:
+                    content += chunk.choices[0].delta.content
+                if chunk.choices and chunk.choices[0].delta.custom_content and chunk.choices[
+                    0].delta.custom_content.attachments:
+                    attachments.extend(chunk.choices[0].delta.custom_content.attachments)
+        except Exception as e:
+            print(StrictStr(f"Error: {e}"))
 
         custom_content = CustomContent(attachments=attachments) if attachments else None
 

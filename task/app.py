@@ -1,3 +1,4 @@
+import logging
 import os
 
 import uvicorn
@@ -14,6 +15,8 @@ from task.tools.mcp.mcp_client import MCPClient
 from task.tools.mcp.mcp_tool import MCPTool
 from task.tools.rag.document_cache import DocumentCache
 from task.tools.rag.rag_tool import RagTool
+
+logging.basicConfig(level=logging.INFO)
 
 DIAL_ENDPOINT = os.getenv('DIAL_ENDPOINT', "http://localhost:8080")
 DEPLOYMENT_NAME = os.getenv('DEPLOYMENT_NAME', 'gpt-4o')

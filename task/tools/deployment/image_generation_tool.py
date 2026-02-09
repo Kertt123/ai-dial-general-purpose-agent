@@ -1,6 +1,7 @@
 from typing import Any
 
-from aidial_sdk.chat_completion import Message, MessageContentTextPart
+from aidial_sdk.chat_completion import Message
+from pydantic import StrictStr
 
 from task.tools.deployment.base import DeploymentTool
 from task.tools.models import ToolCallParams
@@ -9,31 +10,18 @@ from task.tools.models import ToolCallParams
 class ImageGenerationTool(DeploymentTool):
 
     async def _execute(self, tool_call_params: ToolCallParams) -> str | Message:
-        message = await super()._execute(tool_call_params)
+        msg = await super()._execute(tool_call_params)
 
-        if message.custom_content and message.custom_content.attachments:
-            image_attachments = [
-                attachment for attachment in message.custom_content.attachments
-                if attachment.type in ["image/png", "image/jpeg"]
-            ]
+        if msg.custom_content and msg.custom_content.attachments:
+            for attachment in msg.custom_content.attachments:
+                if attachment.type in ("image/png", "image/jpeg"):
+                    tool_call_params.choice.append_content(f"\n\r![image]({attachment.url})\n\r")
 
-            content = ""
-            for attachment in image_attachments:
-                content += f"\n\r![image]({attachment.url})\n\r"
+            if not msg.content:
+                msg.content = StrictStr(
+                    'The image has been successfully generated according to request and shown to user!')
 
-            if not message.content:
-                message.content = []
-
-            if content:
-                if isinstance(message.content, list):
-                     message.content.append(MessageContentTextPart(type='text', text=content))
-                else:
-                     message.content += content
-
-            if not message.content:
-                message.content = [MessageContentTextPart(type='text', text='The image has been successfully generated according to request and shown to user!')]
-
-        return message
+        return msg
 
     @property
     def deployment_name(self) -> str:
